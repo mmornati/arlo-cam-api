@@ -1,188 +1,160 @@
-import json
-import socket
-import sqlite3
-import time
-import sys
+import copy
 
 from arlo.messages import Message
-from arlo.socket import ArloSocket
 import arlo.messages
-from helpers.safe_print import s_print
-from helpers.recorder import Recorder
+from arlo.device import Device
 
-class Camera:
-    def __init__(self, ip, registration):
-        self.registration = registration
-        self.ip = ip
-        self.id = 0
-        self.serial_number = registration["SystemSerialNumber"]
-        self.hostname = f"{registration['SystemModelNumber']}-{self.serial_number[-5:]}"
-        self.status = {}
-        self.friendly_name = self.serial_number
+DEVICE_PREFIXES = [
+    'VMC',
+    'VML',
+    'ABC',
+    'FB'
+]
 
-    def __getitem__(self,key):
-        return self.registration[key]
 
-    def send_message(self,message):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+class Camera(Device):
+    @property
+    def port(self):
+        return 4000
 
-            sock.settimeout(5.0)
-            try:
-                sock.connect((self.ip, 4000))
-            except OSError as msg:
-                print('Connection to camera failed: {msg}')
-                return False
+    def _is_floodlight(self):
+        return self.model_number.startswith('FB1001')
 
-            result = False
-            try:
-                arloSock = ArloSocket(sock)
-                self.id += 1
-                message['ID'] = self.id
-                s_print(f">[{self.ip}][{self.id}] {message['Type']}")
-                arloSock.send(message)
-                ack = arloSock.receive()
-                if (ack != None):
-                    if (ack['ID']==message['ID']):
-                        if ('Response' in ack and ack['Response'] != "Ack"):
-                            s_print(f"<[{self.ip}][{self.id}] {ack['Response']}")
-                            result = False
-                        else:
-                            s_print(f"<[{self.ip}][{self.id}] Ack")
-                            result = True
-            except:
-                print(f'Exception: {sys.exc_info()}')
-            finally:
-                return result
+    def _get_quality_message_templates(self):
+        if self._is_floodlight():
+            return {
+                "low": (arlo.messages.RA_PARAMS_FLOODLIGHT, arlo.messages.REGISTER_SET_LOW_QUALITY_FLOODLIGHT),
+                "medium": (arlo.messages.RA_PARAMS_FLOODLIGHT, arlo.messages.REGISTER_SET_MEDIUM_QUALITY_FLOODLIGHT),
+                "high": (arlo.messages.RA_PARAMS_FLOODLIGHT, arlo.messages.REGISTER_SET_HIGH_QUALITY_FLOODLIGHT),
+                "subscription": (arlo.messages.RA_PARAMS_FLOODLIGHT, arlo.messages.REGISTER_SET_HIGH_QUALITY_FLOODLIGHT),
+                "insane": (arlo.messages.RA_PARAMS_FLOODLIGHT, arlo.messages.REGISTER_SET_HIGH_QUALITY_FLOODLIGHT),
+            }
 
-    def persist(self):
-        with sqlite3.connect('arlo.db') as conn:
-            c = conn.cursor()
-            # Remove the IP for any redundant camera that has the same IP...
-            c.execute("UPDATE camera SET ip = 'UNKNOWN' WHERE ip = ? AND serialnumber <> ?", (self.ip, self.serial_number))
-            c.execute("REPLACE INTO camera VALUES (?,?,?,?,?,?)", (self.ip, self.serial_number, self.hostname, repr(self.registration), repr(self.status), self.friendly_name))
-            conn.commit()
+        return {
+            "low": (arlo.messages.RA_PARAMS_LOW_QUALITY, arlo.messages.REGISTER_SET_LOW_QUALITY),
+            "medium": (arlo.messages.RA_PARAMS_MEDIUM_QUALITY, arlo.messages.REGISTER_SET_MEDIUM_QUALITY),
+            "high": (arlo.messages.RA_PARAMS_HIGH_QUALITY, arlo.messages.REGISTER_SET_HIGH_QUALITY),
+            "subscription": (arlo.messages.RA_PARAMS_SUBSCRIPTION_QUALITY, arlo.messages.REGISTER_SET_SUBSCRIPTION_QUALITY),
+            "insane": (arlo.messages.RA_PARAMS_INSANE_QUALITY, arlo.messages.REGISTER_SET_INSANE_QUALITY),
+        }
 
-    def pir_led(self,args):
-        register_set = Message(arlo.messages.REGISTER_SET)
+    def _get_quality_messages(self, quality):
+        templates = self._get_quality_message_templates().get(quality.lower())
+        if templates is None:
+            return None, None
+
+        ra_params_template, register_set_template = templates
+        ra_params = Message(copy.deepcopy(ra_params_template))
+        register_set = Message(copy.deepcopy(register_set_template))
+        return ra_params, register_set
+
+    def get_ra_params_for_register_set(self, set_values):
+        for ra_params_template, register_set_template in self._get_quality_message_templates().values():
+            quality_set_values = register_set_template.get('SetValues', {})
+            if all(set_values.get(key) == value for key, value in quality_set_values.items()):
+                return Message(copy.deepcopy(ra_params_template))
+
+        return None
+
+    def build_default_register_set(self, wifi_country_code=None, video_anti_flicker_rate=None, video_quality_default=None):
+        bootstrap_defaults = self.get_bootstrap_defaults()
+        wifi_country_code = wifi_country_code or bootstrap_defaults['WifiCountryCode']
+        video_anti_flicker_rate = video_anti_flicker_rate if video_anti_flicker_rate is not None else bootstrap_defaults['VideoAntiFlickerRate']
+        video_quality_default = video_quality_default or bootstrap_defaults['VideoQualityDefault']
+
+        if self.model_number.startswith('VMC5040'):
+            registerSet = Message(copy.deepcopy(arlo.messages.REGISTER_SET_INITIAL_ULTRA))
+        elif self._is_floodlight():
+            registerSet = Message(copy.deepcopy(arlo.messages.REGISTER_SET_INITIAL_FLOODLIGHT))
+        else:
+            registerSet = Message(copy.deepcopy(arlo.messages.REGISTER_SET_INITIAL_SUBSCRIPTION))
+
+        registerSet['SetValues']['WifiCountryCode'] = wifi_country_code
+        registerSet['SetValues']['VideoAntiFlickerRate'] = video_anti_flicker_rate
+
+        if video_quality_default == 'default':
+            video_quality_default = 'insane'
+
+        _, quality_register_set = self._get_quality_messages(video_quality_default)
+        if quality_register_set is not None:
+            registerSet['SetValues'].update(copy.deepcopy(quality_register_set['SetValues']))
+
+        return registerSet
+
+    def send_initial_register_set(self, wifi_country_code, video_anti_flicker_rate=None, video_quality_default='default'):
+        if not self.model_number.startswith('VMC5040') and not self._is_floodlight():
+            # Preserve existing startup behavior without persisting this bootstrap-only command.
+            self.arm({"PIRTargetState": "Armed"}, persist_default=False)
+
+        if self.default_register_set is None:
+            self.set_default_register_set(
+                self.build_default_register_set(
+                    wifi_country_code,
+                    video_anti_flicker_rate,
+                    video_quality_default
+                )
+            )
+
+        return self.send_default_register_set()
+
+    def pir_led(self, args):
         enabled = args['enabled']
         sensitivity = args['sensitivity']
 
-        register_set["SetValues"] = {
-            "PIREnableLED":enabled,
-            "PIRLEDSensitivity":sensitivity
-            }
+        set_values = {
+            "PIREnableLED": enabled,
+            "PIRLEDSensitivity": sensitivity
+        }
 
-        return self.send_message(register_set)
+        return self.send_register_set_values(set_values)
 
-    def set_activity_zones(self,args):
-        activity_zones = Message(arlo.messages.ACTIVITY_ZONE_ALL)
-        # TODO:Set The Co-ordinates  
+    def set_activity_zones(self, args):
+        activity_zones = Message(copy.deepcopy(arlo.messages.ACTIVITY_ZONE_ALL))
+        # TODO:Set The Co-ordinates
         return self.send_message(activity_zones)
 
-    def unset_activity_zones(self,args):
-        activity_zones = Message(arlo.messages.ACTIVITY_ZONE_DELETE)
+    def unset_activity_zones(self, args):
+        activity_zones = Message(copy.deepcopy(arlo.messages.ACTIVITY_ZONE_DELETE))
         return self.send_message(activity_zones)
 
-    def set_quality(self,args):
-        quality = args["quality"].lower()
-        if quality == "low":
-            ra_params = Message(arlo.messages.RA_PARAMS_LOW_QUALITY)
-            registerSet = Message(arlo.messages.REGISTER_SET_LOW_QUALITY)
-        elif quality == "medium":
-            ra_params = Message(arlo.messages.RA_PARAMS_MEDIUM_QUALITY)
-            registerSet = Message(arlo.messages.REGISTER_SET_MEDIUM_QUALITY)
-        elif quality == "high":
-            ra_params = Message(arlo.messages.RA_PARAMS_HIGH_QUALITY)
-            registerSet = Message(arlo.messages.REGISTER_SET_HIGH_QUALITY)
-        elif quality == "subscription":
-            ra_params = Message(arlo.messages.RA_PARAMS_SUBSCRIPTION_QUALITY)
-            registerSet = Message(arlo.messages.REGISTER_SET_SUBSCRIPTION_QUALITY)
-        else:
+    def set_quality(self, args):
+        ra_params, registerSet = self._get_quality_messages(args["quality"])
+        if ra_params is None or registerSet is None:
             return False
 
-        return self.send_message(ra_params) and self.send_message(registerSet)
+        result = self.send_message(ra_params) and self.send_message(registerSet)
+        if result:
+            self.update_default_register_set(registerSet['SetValues'])
 
+        return result
 
-    def arm(self,args):
-        register_set = Message(arlo.messages.REGISTER_SET)
+    def arm(self, args, persist_default=True):
         pir_target_state = args['PIRTargetState']
-        video_motion_estimation_enable = args['VideoMotionEstimationEnable']
-        audio_target_state = args['AudioTargetState']
+        pir_start_sensitivity = args.get('PIRStartSensitivity') or 80
+        pir_action = args.get('PIRAction') or 'Stream'
+        video_motion_estimation_enable = args.get('VideoMotionEstimationEnable') or False
+        audio_target_state = args.get('AudioTargetState') or 'Disarmed'
 
-        register_set["SetValues"] = {
-                "PIRTargetState":pir_target_state,
-                "PIRStartSensitivity":80,
-                "PIRAction":"Stream",
-                "VideoMotionEstimationEnable":video_motion_estimation_enable,
-                "VideoMotionSensitivity":80,
-                "AudioTargetState":audio_target_state,
-                "DefaultMotionStreamTimeLimit":10 # Unclear what this does, only set in normal traffic when 'Disarmed'
-            }
+        set_values = {
+            "PIRTargetState": pir_target_state,
+            "PIRStartSensitivity": pir_start_sensitivity,
+            "PIRAction": pir_action,
+            "VideoMotionEstimationEnable": video_motion_estimation_enable,
+            "VideoMotionSensitivity": 80,
+            "AudioTargetState": audio_target_state,
+            # Unclear what this does, only set in normal traffic when 'Disarmed'
+            "DefaultMotionStreamTimeLimit": 10
+        }
 
-        return self.send_message(register_set)
+        return self.send_register_set_values(set_values, persist_default=persist_default)
 
-    def set_user_stream_active(self,active):
-        register_set = Message(arlo.messages.REGISTER_SET)
-        register_set['SetValues']['UserStreamActive'] = int(active)
-        return self.send_message(register_set)
-
-    def status_request(self):
-        _status_request = Message(arlo.messages.STATUS_REQUEST)
-        return self.send_message(_status_request)
+    def set_user_stream_active(self, active):
+        set_values = {
+            'UserStreamActive': int(active)
+        }
+        return self.send_register_set_values(set_values)
 
     def snapshot_request(self, url):
-        _snapshot_request = Message(arlo.messages.SNAPSHOT)
+        _snapshot_request = Message(copy.deepcopy(arlo.messages.SNAPSHOT))
         _snapshot_request['DestinationURL'] = url
         return self.send_message(_snapshot_request)
-
-    def mic_request(self, enabled):
-        register_set = Message(arlo.messages.REGISTER_SET)
-        register_set['AudioMicEnable'] = enabled
-        return self.send_message(register_set)
-
-    def speaker_request(self, enabled):
-        register_set = Message(arlo.messages.REGISTER_SET)
-        register_set['AudioSpkrEnable'] = enabled
-        return self.send_message(register_set)
-
-    def record(self, duration, is4k):
-        self.status_request() # Cameras tend to be unresponsive so send a status request to wake up
-        time.sleep(0.1)
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        path = f"/tmp/{self.serial_number}{timestr}-user.mpg", duration
-        if is4k:
-            addr = f'{self.ip}:555'
-        else:
-            addr = f'{self.ip}:554'
-        recorder = Recorder(addr, path, duration)
-        recorder.run()
-        return path
-
-    @staticmethod
-    def from_db_serial(serial):
-        with sqlite3.connect('arlo.db') as conn:
-            c = conn.cursor()
-            c.execute("SELECT * FROM camera WHERE serialnumber = ?", (serial,))
-            result = c.fetchone()
-            return Camera.from_db_row(result)
-
-    @staticmethod
-    def from_db_ip(ip):
-        with sqlite3.connect('arlo.db') as conn:
-            c = conn.cursor()
-            c.execute("SELECT * FROM camera WHERE ip = ?", (ip,))
-            result = c.fetchone()
-            return Camera.from_db_row(result)
-
-    @staticmethod
-    def from_db_row(row):
-        if row is not None:
-            (ip,serial_number,hostname,registration,status,friendly_name) = row
-            _registration = Message.from_json(registration)
-            cam = Camera(ip,_registration)
-            cam.status = Message.from_json(status)
-            cam.friendly_name = friendly_name
-            return cam
-        else:
-            return None
-

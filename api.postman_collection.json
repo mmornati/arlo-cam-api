@@ -6,73 +6,82 @@
 	},
 	"item": [
 		{
-			"name": "List Cameras",
+			"name": "List Devices",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "{{base_url}}/camera",
+					"raw": "{{base_url}}/device",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera"
+						"device"
 					]
 				}
 			},
 			"response": []
 		},
 		{
-			"name": "Camera set friendlyname",
+			"name": "Device set friendlyname",
 			"request": {
 				"method": "POST",
 				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"name\": \"My Friendly Name\"}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/statusrequest",
+					"raw": "{{base_url}}/device/{{serial_number}}/friendlyname",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
-						"statusrequest"
+						"friendlyname"
 					]
 				}
 			},
 			"response": []
 		},
 		{
-			"name": "Camera status request",
+			"name": "Device status request",
 			"request": {
 				"method": "POST",
 				"header": [],
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/statusrequest",
+					"raw": "{{base_url}}/device/{{serial_number}}/statusrequest",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"statusrequest"
 					]
 				},
-				"description": "Request the camera to send a status update."
+				"description": "Request the device to send a status update."
 			},
 			"response": []
 		},
 		{
-			"name": "Camera Status",
+			"name": "Device Status",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}",
+					"raw": "{{base_url}}/device/{{serial_number}}",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}"
 					]
 				}
@@ -80,17 +89,17 @@
 			"response": []
 		},
 		{
-			"name": "Camera Registration",
+			"name": "Device Registration",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/registration",
+					"raw": "{{base_url}}/device/{{serial_number}}/registration",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"registration"
 					]
@@ -99,7 +108,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera set UserStreamActive",
+			"name": "Device set UserStreamActive",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -113,12 +122,12 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/userstreamactive",
+					"raw": "{{base_url}}/device/{{serial_number}}/userstreamactive",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"userstreamactive"
 					]
@@ -128,7 +137,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera Audio Mic",
+			"name": "Device Audio Mic",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -142,12 +151,12 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/audiomic",
+					"raw": "{{base_url}}/device/{{serial_number}}/audiomic",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"audiomic"
 					]
@@ -157,7 +166,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera Audio Speaker",
+			"name": "Device Audio Speaker",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -171,12 +180,12 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/audiospeaker",
+					"raw": "{{base_url}}/device/{{serial_number}}/audiospeaker",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"audiospeaker"
 					]
@@ -186,7 +195,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera Arm",
+			"name": "Device Arm",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -200,12 +209,12 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/arm",
+					"raw": "{{base_url}}/device/{{serial_number}}/arm",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"arm"
 					]
@@ -215,7 +224,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera PIR LED",
+			"name": "Device PIR LED",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -229,22 +238,22 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/pirled",
+					"raw": "{{base_url}}/device/{{serial_number}}/pirled",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"pirled"
 					]
 				},
-				"description": "Causes an amber LED to flash when the PIR sensor is triggered. Does not activate camera alerts."
+				"description": "Causes an amber LED to flash when the PIR sensor is triggered. Does not activate device alerts."
 			},
 			"response": []
 		},
 		{
-			"name": "Camera Set Quality",
+			"name": "Device Set Quality",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -258,12 +267,12 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/quality",
+					"raw": "{{base_url}}/device/{{serial_number}}/quality",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"quality"
 					]
@@ -273,7 +282,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera Set Activity Zones",
+			"name": "Device Set Activity Zones",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -287,12 +296,12 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/activityzones",
+					"raw": "{{base_url}}/device/{{serial_number}}/activityzones",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"activityzones"
 					]
@@ -302,7 +311,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera Unset Activity Zones",
+			"name": "Device Unset Activity Zones",
 			"request": {
 				"method": "DELETE",
 				"header": [],
@@ -316,12 +325,12 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/activityzones",
+					"raw": "{{base_url}}/device/{{serial_number}}/activityzones",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"activityzones"
 					]
@@ -331,7 +340,7 @@
 			"response": []
 		},
 		{
-			"name": "Camera Request Snapshot",
+			"name": "Device Request Snapshot",
 			"request": {
 				"method": "POST",
 				"header": [],
@@ -345,42 +354,14 @@
 					}
 				},
 				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/snapshot",
+					"raw": "{{base_url}}/device/{{serial_number}}/snapshot",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
-						"camera",
+						"device",
 						"{{serial_number}}",
 						"snapshot"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Camera Request Record",
-			"request": {
-				"method": "POST",
-				"header": [],
-				"body": {
-					"mode": "raw",
-					"raw": "{\"duration\":10,\"is4k\":false}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "{{base_url}}/camera/{{serial_number}}/record",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"camera",
-						"{{serial_number}}",
-						"record"
 					]
 				}
 			},

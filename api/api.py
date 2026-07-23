@@ -1,161 +1,173 @@
 import flask
 import threading
 import sqlite3
-import json
 import functools
 import os
+from flask import send_file
+import io
+from arlo.device_db import DeviceDB
+from arlo.device import Device
 from arlo.camera import Camera
-from arlo.messages import Message
-from flask import g
 
 app = flask.Flask(__name__)
 app.config["DEBUG"] = False
-app.use_reloader=False
+app.use_reloader = False
 
-def validate_camera_request(body_required=True):
+
+def validate_device_request(body_required=True):
     def decorator(f):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
-            g.camera = Camera.from_db_serial(kwargs['serial'])
-            if g.camera is None:
+            device = DeviceDB.from_db_serial(kwargs['serial'])
+            if device is None:
                 flask.abort(404)
+            kwargs['device'] = device
 
             if body_required:
-                g.args = flask.request.get_json()
-                if g.args is None:
+                req_body = flask.request.get_json()
+                if req_body is None:
                     flask.abort(400)
+                kwargs['req_body'] = req_body
 
-            return f(*args,**kwargs)
+            return f(*args, **kwargs)
         return wrapper
     return decorator
+
 
 @app.route('/', methods=['GET'])
 def home():
     return "PING"
 
-@app.route('/camera', methods=['GET'])
+
+@app.route('/device', methods=['GET'])
 def list():
+    DeviceDB.ensure_schema()
     with sqlite3.connect('arlo.db') as conn:
         c = conn.cursor()
-        c.execute("SELECT * FROM camera")
+        c.execute("SELECT ip, hostname, serialnumber, friendlyname FROM devices")
         rows = c.fetchall()
-        cameras = []
+        devices = []
         if rows is not None:
             for row in rows:
-                (ip,serial_number,hostname,registration,status,friendly_name) = row
-                cameras.append({"ip":ip,"hostname":hostname,"serial_number":serial_number,"friendly_name":friendly_name})
+                (ip, hostname, serial_number, friendly_name) = row
+                devices.append({"ip": ip, "hostname": hostname,
+                               "serial_number": serial_number, "friendly_name": friendly_name})
 
-        return flask.jsonify(cameras)
+        return flask.jsonify(devices)
 
-@app.route('/camera/<serial>', methods=['GET'])
-@validate_camera_request(body_required=False)
-def status(serial):
-    if g.camera.status is None:
+
+@app.route('/device/<serial>', methods=['GET', 'DELETE'])
+@validate_device_request(body_required=False)
+def device(serial, device: Device):
+    if flask.request.method == 'DELETE':
+        return flask.jsonify({"result": DeviceDB.delete(device)})
+    elif device.status is None:
         return flask.jsonify({})
     else:
-        return flask.jsonify(g.camera.status.dictionary)
+        return flask.jsonify(device.status.dictionary)
 
-@app.route('/camera/<serial>/registration', methods=['GET'])
-@validate_camera_request(body_required=False)
-def registration(serial):
-    if g.camera.registration is None:
+
+@app.route('/device/<serial>/registration', methods=['GET'])
+@validate_device_request(body_required=False)
+def registration(serial, device: Device):
+    if device.registration is None:
         return flask.jsonify({})
     else:
-        return flask.jsonify(g.camera.registration.dictionary)
+        return flask.jsonify(device.registration.dictionary)
 
-@app.route('/camera/<serial>/statusrequest', methods=['POST'])
-@validate_camera_request(body_required=False)
-def status_request(serial):
-    result = g.camera.status_request()
-    return flask.jsonify({"result":result})
 
-@app.route('/camera/<serial>/userstreamactive', methods=['POST'])
-@validate_camera_request()
-def user_stream_active(serial):
-    active = g.args["active"]
+@app.route('/device/<serial>/statusrequest', methods=['POST'])
+@validate_device_request(body_required=False)
+def status_request(serial, device: Device):
+    result = device.status_request()
+    return flask.jsonify({"result": result})
+
+
+@app.route('/device/<serial>/userstreamactive', methods=['POST'])
+@validate_device_request()
+def user_stream_active(serial, req_body, device: Camera):
+    active = req_body.get("active")
     if active is None:
         flask.abort(400)
+    result = device.set_user_stream_active(int(active))
+    return flask.jsonify({"result": result})
 
-    result = g.camera.set_user_stream_active(int(active))
-    return flask.jsonify({"result":result})
 
-@app.route('/camera/<serial>/arm', methods=['POST'])
-@validate_camera_request()
-def arm(serial):
-    result = g.camera.arm(g.args)
-    return flask.jsonify({"result":result})
+@app.route('/device/<serial>/arm', methods=['POST'])
+@validate_device_request()
+def arm(serial, req_body, device: Device):
+    result = device.arm(req_body)
+    return flask.jsonify({"result": result})
 
-@app.route('/camera/<serial>/pirled', methods=['POST'])
-@validate_camera_request()
-def pir_led(serial):
-    result = g.camera.pir_led(g.args)
-    return flask.jsonify({"result":result})
 
-@app.route('/camera/<serial>/quality', methods=['POST'])
-@validate_camera_request()
-def set_quality(serial):
-    if g.args['quality'] is None:
+@app.route('/device/<serial>/pirled', methods=['POST'])
+@validate_device_request()
+def pir_led(serial, req_body, device: Camera):
+    result = device.pir_led(req_body)
+    return flask.jsonify({"result": result})
+
+
+@app.route('/device/<serial>/quality', methods=['POST'])
+@validate_device_request()
+def set_quality(serial, req_body, device: Camera):
+    if req_body['quality'] is None:
         flask.abort(400)
     else:
-        result = g.camera.set_quality(g.args)
-        return flask.jsonify({"result":result})
+        result = device.set_quality(req_body)
+        return flask.jsonify({"result": result})
 
-@app.route('/camera/<serial>/snapshot', methods=['POST'])
-@validate_camera_request()
-def request_snapshot(serial):
-    if g.args['url'] is None:
+
+@app.route('/device/<serial>/snapshot', methods=['POST'])
+@validate_device_request()
+def request_snapshot(serial, req_body, device: Camera):
+    if req_body['url'] is None:
         flask.abort(400)
     else:
-        result = g.camera.snapshot_request(g.args['url'])
-        return flask.jsonify({"result":result})
+        result = device.snapshot_request(req_body['url'])
+        return flask.jsonify({"result": result})
 
-@app.route('/camera/<serial>/audiomic', methods=['POST'])
-@validate_camera_request()
-def request_mic(serial):
-    if g.args['enabled'] is None:
+
+@app.route('/device/<serial>/audiomic', methods=['POST'])
+@validate_device_request()
+def request_mic(serial, req_body, device: Camera):
+    if req_body['enabled'] is None:
         flask.abort(400)
     else:
-        result = g.camera.mic_request(g.args['enabled'])
-        return flask.jsonify({"result":result})
+        result = device.mic_request(req_body['enabled'])
+        return flask.jsonify({"result": result})
 
-@app.route('/camera/<serial>/audiospeaker', methods=['POST'])
-@validate_camera_request()
-def request_speaker(serial):
-    if g.args['enabled'] is None:
+
+@app.route('/device/<serial>/audiospeaker', methods=['POST'])
+@validate_device_request()
+def request_speaker(serial, req_body, device: Device):
+    if req_body['enabled'] is None:
         flask.abort(400)
     else:
-        result = g.camera.speaker_request(g.args['enabled'])
-        return flask.jsonify({"result":result})
+        result = device.speaker_request(req_body['enabled'])
+        return flask.jsonify({"result": result})
 
-@app.route('/camera/<serial>/record', methods=['POST'])
-@validate_camera_request()
-def request_record(serial):
-    if g.args['duration'] is None:
+
+@app.route('/device/<serial>/friendlyname', methods=['POST'])
+@validate_device_request()
+def set_friendlyname(serial, req_body, device: Device):
+    if req_body['name'] is None:
         flask.abort(400)
     else:
-        result = g.camera.record(g.args['duration'], g.args['is4k'])
-        return flask.jsonify({"result":result})
+        device.friendly_name = req_body['name']
+        DeviceDB.persist(device)
+        return flask.jsonify({"result": True})
 
-@app.route('/camera/<serial>/friendlyname', methods=['POST'])
-@validate_camera_request()
-def set_friendlyname(serial):
-    if g.args['name'] is None:
-        flask.abort(400)
-    else:
-        g.camera.friendly_name = g.args['name']
-        g.camera.persist()
 
-        return flask.jsonify({"result":True})
-
-@app.route('/camera/<serial>/activityzones', methods=['POST','DELETE'])
-@validate_camera_request()
-def set_activity_zones(serial):
+@app.route('/device/<serial>/activityzones', methods=['POST', 'DELETE'])
+@validate_device_request()
+def set_activity_zones(serial, req_body, device: Camera):
     if flask.request.method == 'DELETE':
-        result = g.camera.unset_activity_zones()
+        result = device.unset_activity_zones()
     else:
-        result = g.camera.set_activity_zones(g.args)
+        result = device.set_activity_zones(req_body)
 
-    return flask.jsonify({"result":result})
+    return flask.jsonify({"result": result})
+
 
 @app.route('/snapshot/<identifier>/', methods=['POST'])
 def receive_snapshot(identifier):
@@ -163,17 +175,51 @@ def receive_snapshot(identifier):
         flask.abort(400)
     else:
         file = flask.request.files['file']
-        if file.filename=='':
+        if file.filename == '':
             flask.abort(400)
         else:
             start_path = os.path.abspath('/tmp')
-            target_path = os.path.join(start_path,f"{identifier}.jpg")
+            target_path = os.path.join(start_path, f"{identifier}.jpg")
             common_prefix = os.path.commonprefix([target_path, start_path])
             if (common_prefix != start_path):
                 flask.abort(400)
             else:
                 file.save(target_path)
             return ""
+
+
+@app.route('/snapshot/<identifier>', methods=['GET'])
+def get_snapshot(identifier):
+    start_path = os.path.abspath('/tmp')
+    target_path = os.path.join(start_path, f"{identifier}.jpg")
+    common_prefix = os.path.commonprefix([target_path, start_path])
+    if (common_prefix != start_path or not os.path.isfile(target_path)):
+        flask.abort(400)
+    else:
+        # read the file into memory
+        return_data = io.BytesIO()
+        with open(target_path, 'rb') as fo:
+            return_data.write(fo.read())
+        # after writing, cursor will be at last byte, so move it to start
+        return_data.seek(0)
+        # delete the file
+        os.remove(target_path)
+        # send it to client
+        return send_file(return_data, mimetype='image/jpeg', attachment_filename=f'{identifier}.jpg')
+
+
+@app.route('/device/<serial>/message', methods=['POST'])
+@validate_device_request()
+def message(serial, req_body, device: Device):
+    result = device.send_message_dict(req_body)
+    return flask.jsonify({"result": result})
+
+
+@app.route('/device/<serial>/registerset', methods=['POST'])
+@validate_device_request()
+def register_set(serial, req_body, device: Device):
+    result = device.register_set(req_body)
+    return flask.jsonify({"result": result})
 
 
 def get_thread():
