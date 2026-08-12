@@ -205,7 +205,7 @@ def get_snapshot(identifier):
         # delete the file
         os.remove(target_path)
         # send it to client
-        return send_file(return_data, mimetype='image/jpeg', attachment_filename=f'{identifier}.jpg')
+        return send_file(return_data, mimetype='image/jpeg', download_name=f'{identifier}.jpg')
 
 
 @app.route('/device/<serial>/message', methods=['POST'])
