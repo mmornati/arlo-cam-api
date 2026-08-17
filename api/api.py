@@ -223,4 +223,4 @@ def register_set(serial, req_body, device: Device):
 
 
 def get_thread():
-    return threading.Thread(target=app.run(host='0.0.0.0'))
+    return threading.Thread(target=app.run, kwargs={'host': '0.0.0.0'})
