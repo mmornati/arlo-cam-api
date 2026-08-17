@@ -1,6 +1,7 @@
 import select
 import socket
 import threading
+import time
 import yaml
 import copy
 
@@ -29,6 +30,14 @@ NOTIFY_ON_AUDIO_ALERT = config.get('NotifyOnAudioAlert', False)
 NOTIFY_ON_BUTTON_PRESS_ALERT = config.get('NotifyOnButtonPressAlert', True)
 NOTIFY_REGISTERD_AND_STATUS_UPDATE = config.get('NotifyRegisteredAndStatusUpdate', True)
 SNAPSHOT_ON_MOTION = config.get('SnapshotOnMotion', False)
+
+BEACON_INTERVAL_SECONDS = config.get('BeaconIntervalSeconds', 60)
+
+# Registry of devices seen via inbound registration/status messages.
+# Populated under devices_lock from ConnectionThread.run().
+# Iterated by BeaconThread.run() to send periodic keepalives.
+known_devices = {}
+devices_lock = threading.Lock()
 
 
 class ConnectionThread(threading.Thread):
@@ -63,13 +72,15 @@ class ConnectionThread(threading.Thread):
 
                     device.send_initial_register_set(WIFI_COUNTRY_CODE, VIDEO_ANTI_FLICKER_RATE, VIDEO_QUALITY_DEFAULT)
                     DeviceDB.persist(device)
+                    with devices_lock:
+                        known_devices[device.serial_number] = device
                     if NOTIFY_REGISTERD_AND_STATUS_UPDATE:
                         webhook_manager.registration_received(
                             device.ip, device.friendly_name, device.hostname, device.serial_number, device.registration)
                 elif (msg['Type'] == "status"):
                     s_print(f"<[{self.ip}][{msg['ID']}] Status from {msg['SystemSerialNumber']}")
                     device = DeviceDB.from_db_serial(msg['SystemSerialNumber'])
-                    if device is None:
+if device is None:
                         from arlo.camera import Camera
                         cam_msg = dict(msg.dictionary)
                         if 'SystemModelNumber' not in cam_msg:
@@ -81,6 +92,8 @@ class ConnectionThread(threading.Thread):
                     device.ip = self.ip
                     device.status = msg
                     DeviceDB.persist(device)
+                    with devices_lock:
+                        known_devices[device.serial_number] = device
                     if NOTIFY_REGISTERD_AND_STATUS_UPDATE:
                         webhook_manager.status_received(device.ip, device.friendly_name,
                                                         device.hostname, device.serial_number, device.status)
@@ -165,8 +178,48 @@ class ServerThread(threading.Thread):
             t.join()
 
 
+class BeaconThread(threading.Thread):
+    """Periodically sends a keepalive statusRequest to every known camera.
+
+    Arlo cameras tolerate only a limited number of missed beacons from the
+    basestation (MaxMissedBeaconTime in the initial registerSet) before
+    assuming the basestation is gone and dropping off WiFi (hibernation).
+    arlo-cam-api currently sends no periodic messages after the initial
+    handshake, so cameras eventually hibernate and become unreachable until
+    their firmware cycle returns them (typically hours, sometimes days).
+
+    Sending a lightweight statusRequest at a short interval keeps cameras
+    attached and reachable so on-demand userstreamactive wakeups continue
+    to work. The statusRequest returns an ACK + status reply, doubling as
+    a liveness probe.
+    """
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.daemon = True
+
+    def run(self):
+        s_print(f'[beacon] Started (interval={BEACON_INTERVAL_SECONDS}s)')
+        while True:
+            time.sleep(BEACON_INTERVAL_SECONDS)
+            with devices_lock:
+                devices = list(known_devices.values())
+            for device in devices:
+                try:
+                    if device.status_request():
+                        s_print(f'[beacon] {device.serial_number} OK')
+                    else:
+                        s_print(f'[beacon] {device.serial_number} no response (offline)')
+                except Exception as e:
+                    s_print(f'[beacon] {device.serial_number} error: {e}')
+
+
 server_thread = ServerThread()
 server_thread.start()
 flask_thread = api.api.get_thread()
+flask_thread.start()
+beacon_thread = BeaconThread()
+beacon_thread.start()
 server_thread.join()
 flask_thread.join()
+beacon_thread.join()
