@@ -196,6 +196,7 @@ class BeaconThread(threading.Thread):
 server_thread = ServerThread()
 server_thread.start()
 flask_thread = api.api.get_thread()
+flask_thread.start()
 beacon_thread = BeaconThread()
 beacon_thread.start()
 server_thread.join()
