@@ -42,6 +42,14 @@ if DEFAULT_PIR_TARGET_STATE not in ('Armed', 'Disarmed'):
 known_devices = {}
 devices_lock = threading.Lock()
 
+# Seed the beacon's probe list from the persisted database so probing starts
+# immediately after startup, without waiting for inbound status/registration
+# messages from each camera.
+for device in DeviceDB.get_all_devices():
+    if device.ip != 'UNKNOWN':  # skip stale/duplicate rows set by persist()
+        known_devices[device.serial_number] = device
+s_print(f'[beacon] Seeded {len(known_devices)} known device(s) from database')
+
 
 class ConnectionThread(threading.Thread):
     def __init__(self, connection, ip, port):
