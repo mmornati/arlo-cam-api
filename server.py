@@ -30,6 +30,7 @@ NOTIFY_ON_AUDIO_ALERT = config.get('NotifyOnAudioAlert', False)
 NOTIFY_ON_BUTTON_PRESS_ALERT = config.get('NotifyOnButtonPressAlert', True)
 NOTIFY_REGISTERD_AND_STATUS_UPDATE = config.get('NotifyRegisteredAndStatusUpdate', True)
 SNAPSHOT_ON_MOTION = config.get('SnapshotOnMotion', False)
+SNAPSHOT_SERVICE_URL = 'http://arlo-snapshot:8000/snapshot'
 
 BEACON_INTERVAL_SECONDS = config.get('BeaconIntervalSeconds', 60)
 DEFAULT_PIR_TARGET_STATE = config.get('DefaultPIRTargetState', 'Armed')
@@ -122,7 +123,7 @@ class ConnectionThread(threading.Thread):
                         if SNAPSHOT_ON_MOTION:
                             import requests
                             try:
-                                snap_url = f"http://arlo-snapshot:8000/snapshot/{device.serial_number}"
+                                snap_url = f"{SNAPSHOT_SERVICE_URL}/{device.serial_number}"
                                 requests.post(snap_url, timeout=35)
                                 s_print(f"<[{self.ip}][{msg['ID']}] Triggered snapshot for {device.serial_number}")
                             except Exception as e:
