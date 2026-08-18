@@ -10,7 +10,7 @@ SnapshotOnMotion: false
 # Interval (seconds) between keepalive statusRequest beacons sent to each
 # known camera. Mimics the Arlo base station beacon so cameras do not
 # assume the basestation is gone (MaxMissedBeaconTime) and drop WiFi.
-BeaconIntervalSeconds: 60
+BeaconIntervalSeconds: 100
 # PIR target state applied during the initial register set sent to every
 # camera on registration. "Disarmed" makes cameras boot disarmed by default
 # so the periodic wake/PIR drain can be avoided when the operator is not
