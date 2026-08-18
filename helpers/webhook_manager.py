@@ -8,11 +8,21 @@ class WebHookManager:
     def __init__(self, config):
         self.config = config
 
+    @staticmethod
+    def _url(config, key):
+        url = config.get(key, '')
+        if not url or not url.strip():
+            return None
+        return url
+
     ### REGISTRATION RECEIVED ###
 
     def registration_received(self, ip, friendly_name, hostname, serial_number, registration):
+        url = self._url(self.config, 'RegistrationWebHookUrl')
+        if url is None:
+            return
         r = self.__registration(ip, friendly_name, hostname, serial_number, registration, time.time(),
-                              url=self.config['RegistrationWebHookUrl'], encoding="application/json", timeout=5)
+                              url=url, encoding="application/json", timeout=5)
         s_print(str(r))
 
     @webhook(sender_callable=targeted.sender)
@@ -22,8 +32,11 @@ class WebHookManager:
     ### STATUS RECEIVED ###
 
     def status_received(self, ip, friendly_name, hostname, serial_number, status):
+        url = self._url(self.config, 'StatusUpdateWebHookUrl')
+        if url is None:
+            return
         r = self.__status(ip, friendly_name, hostname, serial_number, status, time.time(),
-                        url=self.config['StatusUpdateWebHookUrl'], encoding="application/json", timeout=5)
+                        url=url, encoding="application/json", timeout=5)
         s_print(str(r))
 
     @webhook(sender_callable=targeted.sender)
@@ -33,8 +46,11 @@ class WebHookManager:
     ### MOTION DETECTED ###
 
     def motion_detected(self, ip, friendly_name, hostname, serial_number, zone, file_name):
+        url = self._url(self.config, 'MotionRecordingWebHookUrl')
+        if url is None:
+            return
         r = self.__motion(ip, friendly_name, hostname, serial_number, zone, file_name, time.time(),
-                        url=self.config['MotionRecordingWebHookUrl'], encoding="application/json", timeout=5)
+                        url=url, encoding="application/json", timeout=5)
         s_print(str(r))
 
     @webhook(sender_callable=targeted.sender)
@@ -44,8 +60,11 @@ class WebHookManager:
     ### MOTION TIMEOUT ###
 
     def motion_timeout(self, ip, friendly_name, hostname, serial_number):
+        url = self._url(self.config, 'MotionTimeoutWebHookUrl')
+        if url is None:
+            return
         r = self.__motion_timeout(ip, friendly_name, hostname, serial_number, time.time(),
-                        url=self.config['MotionTimeoutWebHookUrl'], encoding="application/json", timeout=5)
+                        url=url, encoding="application/json", timeout=5)
         s_print(str(r))
 
     @webhook(sender_callable=targeted.sender)
@@ -55,8 +74,11 @@ class WebHookManager:
     ### BUTTON PRESSED ###
 
     def button_pressed(self, ip, friendly_name, hostname, serial_number, triggered):
+        url = self._url(self.config, 'ButtonPressWebHookUrl')
+        if url is None:
+            return
         r = self.__button_press(ip, friendly_name, hostname, serial_number, triggered, time.time(),
-                              url=self.config['ButtonPressWebHookUrl'], encoding="application/json", timeout=5)
+                              url=url, encoding="application/json", timeout=5)
         s_print(str(r))
 
     @webhook(sender_callable=targeted.sender)

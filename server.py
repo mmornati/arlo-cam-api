@@ -30,14 +30,26 @@ NOTIFY_ON_AUDIO_ALERT = config.get('NotifyOnAudioAlert', False)
 NOTIFY_ON_BUTTON_PRESS_ALERT = config.get('NotifyOnButtonPressAlert', True)
 NOTIFY_REGISTERD_AND_STATUS_UPDATE = config.get('NotifyRegisteredAndStatusUpdate', True)
 SNAPSHOT_ON_MOTION = config.get('SnapshotOnMotion', False)
+SNAPSHOT_SERVICE_URL = 'http://arlo-snapshot:8000/snapshot'
 
 BEACON_INTERVAL_SECONDS = config.get('BeaconIntervalSeconds', 60)
+DEFAULT_PIR_TARGET_STATE = config.get('DefaultPIRTargetState', 'Armed')
+if DEFAULT_PIR_TARGET_STATE not in ('Armed', 'Disarmed'):
+    raise ValueError(f"Invalid DefaultPIRTargetState: {DEFAULT_PIR_TARGET_STATE!r} (expected 'Armed' or 'Disarmed')")
 
 # Registry of devices seen via inbound registration/status messages.
 # Populated under devices_lock from ConnectionThread.run().
 # Iterated by BeaconThread.run() to send periodic keepalives.
 known_devices = {}
 devices_lock = threading.Lock()
+
+# Seed the beacon's probe list from the persisted database so probing starts
+# immediately after startup, without waiting for inbound status/registration
+# messages from each camera.
+for device in DeviceDB.get_all_devices():
+    if device.ip != 'UNKNOWN':
+        known_devices[device.serial_number] = device
+s_print(f'[beacon] Seeded {len(known_devices)} known device(s) from database')
 
 
 class ConnectionThread(threading.Thread):
@@ -70,7 +82,7 @@ class ConnectionThread(threading.Thread):
                     DeviceDB.persist(device)
                     s_print(f"<[{self.ip}][{msg['ID']}] Registration from {msg['SystemSerialNumber']} - {device.hostname}")
 
-                    device.send_initial_register_set(WIFI_COUNTRY_CODE, VIDEO_ANTI_FLICKER_RATE, VIDEO_QUALITY_DEFAULT)
+                    device.send_initial_register_set(WIFI_COUNTRY_CODE, VIDEO_ANTI_FLICKER_RATE, VIDEO_QUALITY_DEFAULT, DEFAULT_PIR_TARGET_STATE)
                     DeviceDB.persist(device)
                     with devices_lock:
                         known_devices[device.serial_number] = device
@@ -80,7 +92,7 @@ class ConnectionThread(threading.Thread):
                 elif (msg['Type'] == "status"):
                     s_print(f"<[{self.ip}][{msg['ID']}] Status from {msg['SystemSerialNumber']}")
                     device = DeviceDB.from_db_serial(msg['SystemSerialNumber'])
-if device is None:
+                    if device is None:
                         from arlo.camera import Camera
                         cam_msg = dict(msg.dictionary)
                         if 'SystemModelNumber' not in cam_msg:
@@ -111,7 +123,7 @@ if device is None:
                         if SNAPSHOT_ON_MOTION:
                             import requests
                             try:
-                                snap_url = f"http://arlo-snapshot:8000/snapshot/{device.serial_number}"
+                                snap_url = f"{SNAPSHOT_SERVICE_URL}/{device.serial_number}"
                                 requests.post(snap_url, timeout=35)
                                 s_print(f"<[{self.ip}][{msg['ID']}] Triggered snapshot for {device.serial_number}")
                             except Exception as e:
