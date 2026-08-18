@@ -6,7 +6,7 @@ NotifyOnMotionAlert: true
 NotifyOnMotionTimeoutAlert: false
 NotifyOnAudioAlert: false
 NotifyOnButtonPressAlert: true
-SnapshotOnMotion: false
+SnapshotOnMotion: true
 # Interval (seconds) between keepalive statusRequest beacons sent to each
 # known camera. Mimics the Arlo base station beacon so cameras do not
 # assume the basestation is gone (MaxMissedBeaconTime) and drop WiFi.
