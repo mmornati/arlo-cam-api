@@ -32,6 +32,9 @@ NOTIFY_REGISTERD_AND_STATUS_UPDATE = config.get('NotifyRegisteredAndStatusUpdate
 SNAPSHOT_ON_MOTION = config.get('SnapshotOnMotion', False)
 
 BEACON_INTERVAL_SECONDS = config.get('BeaconIntervalSeconds', 60)
+DEFAULT_PIR_TARGET_STATE = config.get('DefaultPIRTargetState', 'Armed')
+if DEFAULT_PIR_TARGET_STATE not in ('Armed', 'Disarmed'):
+    raise ValueError(f"Invalid DefaultPIRTargetState: {DEFAULT_PIR_TARGET_STATE!r} (expected 'Armed' or 'Disarmed')")
 
 # Registry of devices seen via inbound registration/status messages.
 # Populated under devices_lock from ConnectionThread.run().
@@ -70,7 +73,7 @@ class ConnectionThread(threading.Thread):
                     DeviceDB.persist(device)
                     s_print(f"<[{self.ip}][{msg['ID']}] Registration from {msg['SystemSerialNumber']} - {device.hostname}")
 
-                    device.send_initial_register_set(WIFI_COUNTRY_CODE, VIDEO_ANTI_FLICKER_RATE, VIDEO_QUALITY_DEFAULT)
+                    device.send_initial_register_set(WIFI_COUNTRY_CODE, VIDEO_ANTI_FLICKER_RATE, VIDEO_QUALITY_DEFAULT, DEFAULT_PIR_TARGET_STATE)
                     DeviceDB.persist(device)
                     with devices_lock:
                         known_devices[device.serial_number] = device
