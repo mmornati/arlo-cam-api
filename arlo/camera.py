@@ -81,10 +81,12 @@ class Camera(Device):
 
         return registerSet
 
-    def send_initial_register_set(self, wifi_country_code, video_anti_flicker_rate=None, video_quality_default='default'):
+    def send_initial_register_set(self, wifi_country_code, video_anti_flicker_rate=None, video_quality_default='default', pir_target_state='Armed'):
         if not self.model_number.startswith('VMC5040') and not self._is_floodlight():
-            # Preserve existing startup behavior without persisting this bootstrap-only command.
-            self.arm({"PIRTargetState": "Armed"}, persist_default=False)
+            # Bootstrap-only arm/disarm; the chosen value comes from the
+            # server's DefaultPIRTargetState config so freshly-registered
+            # cameras stay in the operator's preferred state by default.
+            self.arm({"PIRTargetState": pir_target_state}, persist_default=False)
 
         if self.default_register_set is None:
             self.set_default_register_set(
