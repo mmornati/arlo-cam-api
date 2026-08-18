@@ -145,6 +145,19 @@ class DeviceDB:
 
     @staticmethod
     @synchronized
+    def get_all_devices():
+        DeviceDB.ensure_schema()
+        with sqlite3.connect('arlo.db') as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT ip, serialnumber, hostname, registration, status, register_set, friendlyname "
+                "FROM devices"
+            )
+            rows = c.fetchall()
+        return [device for device in (DeviceDB.from_db_row(row) for row in rows) if device is not None]
+
+    @staticmethod
+    @synchronized
     def persist(device: Device):
         DeviceDB.ensure_schema()
         with sqlite3.connect('arlo.db') as conn:
