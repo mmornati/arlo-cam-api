@@ -92,14 +92,16 @@ class ConnectionThread(threading.Thread):
                     s_print(f"<[{self.ip}][{msg['ID']}] Status from {msg['SystemSerialNumber']}")
                     device = DeviceDB.from_db_serial(msg['SystemSerialNumber'])
                     if device is None:
-                        from arlo.camera import Camera
                         cam_msg = dict(msg.dictionary)
                         if 'SystemModelNumber' not in cam_msg:
                             cam_msg['SystemModelNumber'] = 'VMC4040P'
-                        device = Camera(self.ip, Message(cam_msg))
-                        device.status = {}
-                        device.friendly_name = msg['SystemSerialNumber']
-                        s_print(f"<[{self.ip}][{msg['ID']}] Auto-registered {device.serial_number} on status (forced Camera)")
+                        device = DeviceFactory.createDevice(self.ip, Message(cam_msg))
+                        if device is None:
+                            from arlo.camera import Camera
+                            device = Camera(self.ip, Message(cam_msg))
+                            device.status = {}
+                            device.friendly_name = msg['SystemSerialNumber']
+                        s_print(f"<[{self.ip}][{msg['ID']}] Auto-registered {device.serial_number} on status")
                     device.ip = self.ip
                     device.status = msg
                     DeviceDB.persist(device)
