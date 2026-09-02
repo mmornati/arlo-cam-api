@@ -30,8 +30,6 @@ NOTIFY_ON_BUTTON_PRESS_ALERT = config.get('NotifyOnButtonPressAlert', True)
 NOTIFY_REGISTERD_AND_STATUS_UPDATE = config.get('NotifyRegisteredAndStatusUpdate', True)
 SNAPSHOT_ON_MOTION = config.get('SnapshotOnMotion', False)
 
-SNAPSHOT_ON_MOTION = config.get('SnapshotOnMotion', False)
-
 
 class ConnectionThread(threading.Thread):
     def __init__(self, connection, ip, port):
